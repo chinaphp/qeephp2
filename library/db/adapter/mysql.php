@@ -35,7 +35,7 @@ class QDB_Adapter_Mysql extends QDB_Adapter_Abstract
 
     function connect($pconnect = false, $force_new = false)
     {
-        if (is_resource($this->_conn)) { return; }
+        if (!$force_new && is_resource($this->_conn)) { return; } //if (is_resource($this->_conn)) { return; }
 
         $this->_last_err = null;
         $this->_last_err_code = null;
@@ -114,7 +114,7 @@ class QDB_Adapter_Mysql extends QDB_Adapter_Abstract
             }
             return $value;
         }
-        if (is_int($value)) { return $value; }
+        if (is_int($value) || is_float($value)) { return $value; } // if (is_int($value)) { return $value; } // 修正qstr方法对浮点数返回字符串的bug
         if (is_bool($value))
         {
             return $value ? $this->_true_value : $this->_false_value;
