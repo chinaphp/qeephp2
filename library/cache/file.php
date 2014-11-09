@@ -144,6 +144,28 @@ class QCache_File
 		file_put_contents($path, $content, LOCK_EX);
 	}
 
+
+    /**
+     * 写入缓存，如果已存在则返回false
+     *
+     * @param string $id
+     * @param array $policy
+     *
+     * @return mixed
+     */
+    function add($id, $data, array $policy = null)
+    {
+        if (!$this->_enabled) { return false; }
+        QLog::log('QCache_File add: ' . $id, QLog::DEBUG);
+        if(false !== $this->get($id, $policy))
+        {
+            return false;
+        }
+        $this->set($id, $data, $policy);
+        return true;
+    }
+
+
 	/**
 	 * 读取缓存，失败或缓存撒失效时返回 false
 	 *

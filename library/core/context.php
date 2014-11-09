@@ -1167,6 +1167,7 @@ class QContext implements ArrayAccess
                     ? $opts['script']
                     : $this->scriptName();
           //$url    = strlen($opts['base_uri']) > 0
+          //$url    = !empty($opts['base_uri'])
 
             $url    =  isset($opts['base_uri'])&&strlen($opts['base_uri']) > 0
                     ? rtrim($opts['base_uri'], '/') . '/'

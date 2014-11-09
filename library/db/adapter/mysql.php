@@ -362,7 +362,10 @@ class QDB_Adapter_Mysql extends QDB_Adapter_Abstract
         {
             $field = array();
             $field['name'] = $row['field'];
-            $type = strtolower($row['type']);
+           // $type = strtolower($row['type']);
+            //取字段类型 第一个字段类型 描述信息 抛弃后面的字段属性 例如:float unsigned 取float
+            $row_type = explode(" ",$row['type']);
+            $type = strtolower($row_type[0]);
 
             $field['scale'] = null;
             $query_arr = false;
