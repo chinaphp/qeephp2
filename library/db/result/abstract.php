@@ -252,7 +252,7 @@ abstract class QDB_Result_Abstract
             $objs[] = $obj;
         }
 
-        return QColl::createFromArray($objs, $class_name);
+        return $return_first ? $row : QColl::createFromArray($objs, $class_name); // return QColl::createFromArray($objs, $class_name);
     }
 }
 
