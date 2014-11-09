@@ -960,7 +960,19 @@ class QDB_Select
             unset($this->_parts[self::ORDER]);
         }
 
-        $count = (int)$this->_conn->execute($this->__toString())->fetchOne();
+       // $count = (int)$this->_conn->execute($this->__toString())->fetchOne();
+
+        if (empty($this->_parts[self::GROUP]))
+        {
+            $count = (int)$this->_conn->execute($this->__toString())->fetchOne();
+        }
+        else
+        {
+            $count_g = $this->_conn->execute($this->__toString())->fetchAll();
+            $count = count($count_g);
+        }
+
+
         $this->_query_params[self::PAGED_QUERY] = false;
         if (isset($order))
         {
@@ -975,6 +987,15 @@ class QDB_Select
         if ($pagination['last'] < $pagination['first'])
         {
             $pagination['last'] = $pagination['first'];
+        }
+
+
+        //修正页码超界问题
+        if ($this->_parts[self::LIMIT_OFFSET] >= $count)
+        {
+            //设定到最后一页,也可以设定到第一页
+            $this->_query_params[self::CURRENT_PAGE] = $pagination['last'];
+            $this->_parts[self::LIMIT_OFFSET] = ($pagination['last'] - 1) * $this->_query_params[self::PAGE_SIZE];
         }
 
         $page = $this->_query_params[self::CURRENT_PAGE];
