@@ -3,10 +3,10 @@
  * 定义 QCache_Memcache 类
  * QCache_Memcache使用pecl-memcache或pecl-memcached扩展缓存数据
  * 当pecl-memcached和pecl-memcache同时存在时，以pecl-memcached优先
- * 
+ *
  * @link http://qeephp.com/
  * @package cache
- * @author yangyi <yangyi@surveypie.com> 
+ * @author yangyi <yangyi@surveypie.com>
  */
 class QCache_Memcached {
     /**
@@ -74,7 +74,12 @@ class QCache_Memcached {
         /**
          * 是否使用持久连接, pecl-memcache有效
          */
-        'persistent' => true,
+        'persistent' => false,
+
+        /**
+         * 默认的key前缀
+         */
+        'prefix' => '',
     );
 
     /**
@@ -87,7 +92,13 @@ class QCache_Memcached {
     public function __construct(array $policy = array()) {
         $policy = array_merge($this->_default_policy, $policy);
         if (empty($policy['servers'])) {
-            $policy['servers'][] = $this->_default_server;
+            //加入动态平台默认的memcached服务器
+            $setting = Q::ini('app_config/CONFIG_CACHE_SETTINGS');
+            if (isset($setting['QCache_Memcached'])) {
+                $policy = array_merge($policy, $setting['QCache_Memcached']);
+            } else {
+                $policy['servers'][] = $this->_default_server;
+            }
         }
         $this->_default_policy = $policy;
 
@@ -130,6 +141,10 @@ class QCache_Memcached {
     protected function _initMemcached() {
         $conn = new Memcached();
         $conn->setOption(Memcached::OPT_COMPRESSION, (boolean)$this->_default_policy['compressed']);
+        if(!empty($this->_default_policy['prefix']))
+        {
+            $conn->setOption(Memcached::OPT_PREFIX_KEY, $this->_default_policy['prefix']);
+        }
 
         while (list(, $server) = each($this->_default_policy['servers'])) {
             if (empty($server['weight'])) $server['weight'] = 100;
@@ -139,6 +154,34 @@ class QCache_Memcached {
         }
 
         $this->_conn = $conn;
+    }
+
+    /**
+     * 写入缓存
+     * [code]
+     * $memcache->add('key', 'value', 3600);
+     * $memcache->add('key', 'value', array('life_time' => 3600, 'compressed' => true));
+     * [/code]
+     *
+     * @access public
+     * @return void
+     */
+    public function add($key, $value, $policy = 60) {
+        if(is_numeric($policy)) {
+            $life_time = intval($policy);
+        } else {
+            $life_time = isset($policy['life_time']) ? $policy['life_time'] : $this->_default_policy['life_time'];
+        }
+
+        if ($this->_extension === 'pecl-memcached') {
+            QLog::log('QCache_Memcache(d) add: ' . $key, QLog::DEBUG);
+            return $this->_conn->add($key, $value, $life_time);
+        } else {
+            $compressed = isset($policy['compressed']) ? $policy['compressed'] : $this->_default_policy['compressed'];
+            $prefix = trim($this->_default_policy['prefix']);
+            QLog::log('QCache_Memcache add: ' . $key, QLog::DEBUG);
+            return $this->_conn->add($prefix . $key, $value, $compressed ? MEMCACHE_COMPRESSED : 0, $life_time);
+        }
     }
 
     /**
@@ -196,9 +239,11 @@ class QCache_Memcached {
     protected function _setMemcache(array $set, array $policy = array()) {
         $compressed = isset($policy['compressed']) ? $policy['compressed'] : $this->_default_policy['compressed'];
         $life_time = isset($policy['life_time']) ? $policy['life_time'] : $this->_default_policy['life_time'];
+        $prefix = trim($this->_default_policy['prefix']);
 
         while (list($key, $value) = each($set)) {
-            if (!$this->_conn->set($key, $value, $compressed ? MEMCACHE_COMPRESSED : 0, $life_time)) return false;
+            QLog::log('QCache_Memcache set: ' . $key, QLog::DEBUG);
+            if (!$this->_conn->set($prefix . $key, $value, $compressed ? MEMCACHE_COMPRESSED : 0, $life_time)) return false;
         }
         return true;
     }
@@ -214,6 +259,7 @@ class QCache_Memcached {
     protected function _setMemcached(array $set, array $policy = array()) {
         $life_time = isset($policy['life_time']) ? $policy['life_time'] : $this->_default_policy['life_time'];
         $expire_time = time() + $life_time;
+        QLog::log('QCache_Memcache(d) set: ' . implode(',', array_keys($set)), QLog::DEBUG);
         return $this->_conn->setMulti($set, $expire_time);
     }
 
@@ -243,6 +289,13 @@ class QCache_Memcached {
      * @return mixed
      */
     protected function _getMemcache($keys) {
+        $prefix = trim($this->_default_policy['prefix']);
+        if(is_string($keys)) {
+            QLog::log('QCache_Memcache get: ' . $keys, QLog::DEBUG);
+            $keys = $prefix . $keys;
+        } else {
+            QLog::log('QCache_Memcache get: ' . implode(',', $keys), QLog::DEBUG);
+        }
         return $this->_conn->get($keys);
     }
 
@@ -256,8 +309,10 @@ class QCache_Memcached {
      */
     protected function _getMemcached($keys) {
         if (is_array($keys)) {
+            QLog::log('QCache_Memcache(d) get: ' . implode(',', $keys), QLog::DEBUG);
             return $this->_conn->getMulti($keys);
         } else {
+            QLog::log('QCache_Memcache(d) get: ' . $keys, QLog::DEBUG);
             return $this->_conn->get($keys);
         }
     }
@@ -278,6 +333,13 @@ class QCache_Memcached {
                 $this->remove($key);
             }
         } else {
+            if($this->_extension === 'pecl-memcache') {
+                QLog::log('QCache_Memcache remove: ' . $keys, QLog::DEBUG);
+                $prefix = trim($this->_default_policy['prefix']);
+                $keys = $prefix . $keys;
+            } else {
+                QLog::log('QCache_Memcache(d) remove: ' . $keys, QLog::DEBUG);
+            }
             $this->_conn->delete($keys);
         }
     }
@@ -289,6 +351,7 @@ class QCache_Memcached {
      * @return boolean
      */
     public function clean() {
+        return false;//not allowed
         return $this->_conn->flush();
     }
 
@@ -300,5 +363,29 @@ class QCache_Memcached {
      */
     public function getHandle() {
         return $this->_conn;
+    }
+
+    /**
+     * 获得统计情况
+     *
+     * @access public
+     * @return array
+     */
+    public function getStats() {
+        if($this->_extension === 'pecl-memcache') {
+            return $this->_conn->getExtendedStats();
+        } else {
+            return $this->_conn->getStats();
+        }
+    }
+
+    /**
+     * 获得扩展
+     *
+     * @access public
+     * @return array
+     */
+    public function getExt() {
+        return $this->_extension;
     }
 }
